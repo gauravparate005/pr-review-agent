@@ -12,17 +12,22 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 REPO_NAME = os.getenv("GITHUB_REPOSITORY")
 PR_NUMBER = os.getenv("PR_NUMBER")
 
-if not all([GITHUB_TOKEN, GEMINI_API_KEY, REPO_NAME, PR_NUMBER]):
+if not all([GITHUB_TOKEN, GEMINI_API_KEY, REPO_NAME]):
     raise ValueError("Missing required environment variables. Please check your .env file.")
 
 # Initialize clients
 gh = Github(GITHUB_TOKEN)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-def get_pr_diff(repo, pr_number):
+def get_latest_open_pr(repo):
+    """Fetch the most recent open pull request."""
+    pulls = repo.get_pulls(state='open', sort='created', direction='desc')
+    if pulls.totalCount == 0:
+        return None
+    return pulls[0]
+
+def get_pr_diff(pr):
     """Fetch the diff of the pull request."""
-    pr = repo.get_pull(int(pr_number))
-    
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3.diff"
@@ -30,7 +35,7 @@ def get_pr_diff(repo, pr_number):
     response = requests.get(pr.url, headers=headers)
     response.raise_for_status()
     
-    return pr, response.text
+    return response.text
 
 def get_ai_review(diff_text):
     """Send the diff to Gemini for review."""
@@ -58,8 +63,18 @@ def main():
     print(f"Connecting to GitHub Repository: {REPO_NAME}")
     repo = gh.get_repo(REPO_NAME)
     
-    print(f"Fetching diff for PR #{PR_NUMBER}...")
-    pr, diff_text = get_pr_diff(repo, PR_NUMBER)
+    if PR_NUMBER:
+        print(f"Fetching diff for specific PR #{PR_NUMBER}...")
+        pr = repo.get_pull(int(PR_NUMBER))
+    else:
+        print("Finding the most recent open PR...")
+        pr = get_latest_open_pr(repo)
+        if not pr:
+            print("No open pull requests found.")
+            return
+        print(f"Fetching diff for latest PR #{pr.number}...")
+
+    diff_text = get_pr_diff(pr)
     
     if not diff_text.strip():
         print("No changes found in this PR.")
