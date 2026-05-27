@@ -1,5 +1,4 @@
 import os
-import requests
 from google import genai
 from github import Github
 from dotenv import load_dotenv
@@ -7,10 +6,14 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Environment variables
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 REPO_NAME = os.getenv("GITHUB_REPOSITORY")
 PR_NUMBER = os.getenv("PR_NUMBER")
+
+# Constants
+MAX_DIFF_LENGTH = 15000
 
 if not all([GITHUB_TOKEN, GEMINI_API_KEY, REPO_NAME]):
     raise ValueError("Missing required environment variables. Please check your .env file.")
@@ -27,15 +30,8 @@ def get_latest_open_pr(repo):
     return pulls[0]
 
 def get_pr_diff(pr):
-    """Fetch the diff of the pull request."""
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3.diff"
-    }
-    response = requests.get(pr.url, headers=headers)
-    response.raise_for_status()
-    
-    return response.text
+    """Fetch the diff of the pull request using PyGithub's built-in method."""
+    return pr.get_diff()
 
 def get_ai_review(diff_text):
     """Send the diff to Gemini for review."""
@@ -81,8 +77,8 @@ def main():
         return
 
     # Truncate if diff is too large
-    if len(diff_text) > 15000:
-        diff_text = diff_text[:15000] + "\n... [Diff truncated due to length]"
+    if len(diff_text) > MAX_DIFF_LENGTH:
+        diff_text = diff_text[:MAX_DIFF_LENGTH] + "\n... [Diff truncated due to length]"
 
     review_comment = get_ai_review(diff_text)
     
